@@ -1,0 +1,6 @@
+services:
+  app:
+    build:
+      context: ../trader-backend
+      dockerfile: Dockerfile
+    image: ${APP_IMAGE} # ← build 후 이 이름으로 태깅됨
