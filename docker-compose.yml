@@ -22,6 +22,14 @@ services:
 
   app:
     image: ${APP_IMAGE} # ← Hub 경로 사용 (build 없음!)
+    command:
+      - postgres
+      - -c
+      - max_connections=150
+      - -c
+      - max_locks_per_transaction=512
+      - -c
+      - shared_buffers=2GB
     container_name: app
     environment:
       TZ: ${TZ}
@@ -36,9 +44,85 @@ services:
       - "${APP_PORT}:8080"
     networks: [appnet]
 
+  # ---- Prometheus ----
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./../trader-monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+      - db
+    networks: [appnet]
+
+  # ---- Grafana ----
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/
+    volumes:
+      # 당신이 이미 만든 provisioning 파일을 마운트
+      - ./../trader-monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks: [appnet]
+
+  # ---- Node Exporter (호스트/컨테이너 기본 메트릭) ----
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter
+    pid: "host"
+    # rootless가 아니면 볼륨 마운트로 호스트 메트릭 범위를 넓힐 수 있음(선택)
+    # volumes:
+    #   - /proc:/host/proc:ro
+    #   - /sys:/host/sys:ro
+    #   - /:/rootfs:ro
+    command:
+      - "--path.rootfs=/"
+    networks: [appnet]
+
+  # ---- cAdvisor (컨테이너별 CPU/메모리) ----
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    privileged: true
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [appnet]
+
+  # ---- Postgres Exporter (DB 연결/쿼리 메트릭) ----
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on:
+      - db
+    networks: [appnet]
+
 networks:
   appnet:
     driver: bridge
 
 volumes:
   db_data:
+  prometheus_data:
+  grafana_data:
