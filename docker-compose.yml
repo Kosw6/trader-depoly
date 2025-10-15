@@ -22,6 +22,14 @@ services:
 
   app:
     image: ${APP_IMAGE} # ← Hub 경로 사용 (build 없음!)
+    command:
+      - postgres
+      - -c
+      - max_connections=150
+      - -c
+      - max_locks_per_transaction=512
+      - -c
+      - shared_buffers=2GB
     container_name: app
     environment:
       TZ: ${TZ}
