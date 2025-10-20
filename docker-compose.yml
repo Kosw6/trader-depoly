@@ -43,7 +43,33 @@ services:
     ports:
       - "${APP_PORT}:8080"
     networks: [appnet]
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [appnet]
 
+  # (선택) Redis Exporter - Prometheus로 Redis 메트릭 수집
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: redis-exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [appnet]
   # ---- Prometheus ----
   prometheus:
     image: prom/prometheus:v2.55.1
