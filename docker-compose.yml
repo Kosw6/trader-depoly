@@ -41,26 +41,19 @@ services:
     networks: [appnet]
 
   pgbouncer:
-    image: bitnami/pgbouncer:latest
+    image: edoburu/pgbouncer:v1.24.1-p1
     container_name: pgbouncer
     depends_on:
       - db
+    networks: [appnet]
     ports:
       - "6432:6432"
-    environment:
-      POSTGRESQL_HOST: db
-      POSTGRESQL_PORT: 5432
-      POSTGRESQL_USERNAME: trader
-      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRESQL_DATABASE: trader
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_DEFAULT_POOL_SIZE: "50"
-      PGBOUNCER_MAX_CLIENT_CONN: "2000"
-      PGBOUNCER_SERVER_IDLE_TIMEOUT: "30"
-      PGBOUNCER_QUERY_WAIT_TIMEOUT: "2000"
-      PGBOUNCER_AUTH_TYPE: scram-sha-256
     volumes:
-      - ./pgbouncer/pg_hba.conf:/opt/bitnami/pgbouncer/conf/pg_hba.conf:ro
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    entrypoint: ["pgbouncer"]                     # ← entrypoint.sh 우회
+    command: ["/etc/pgbouncer/pgbouncer.ini"]     # ← ini 직접 전달
+
 
   app:
     image: ${APP_IMAGE} # ← Hub 경로 사용 (build 없음!)
@@ -68,16 +61,18 @@ services:
     environment:
       TZ: ${TZ}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:6432/${POSTGRES_DB}?prepareThreshold=0
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_DATA_REDIS_HOST : redis
       SPRING_DATA_REDIS_PORT : 6379
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+     pgbouncer:                   
+       condition: service_started
+     db:
+       condition: service_healthy
+     redis:
+       condition: service_healthy
     ports:
       - "${APP_PORT}:8080"
     networks: [appnet]
