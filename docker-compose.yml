@@ -28,6 +28,28 @@ services:
       retries: 10
     networks: [appnet]
 
+  pgbouncer:
+    image: bitnami/pgbouncer:latest
+    container_name: pgbouncer
+    depends_on:
+      - db
+    ports:
+      - "6432:6432"
+    environment:
+      POSTGRESQL_HOST: db
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_USERNAME: trader
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRESQL_DATABASE: trader
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_DEFAULT_POOL_SIZE: "50"
+      PGBOUNCER_MAX_CLIENT_CONN: "2000"
+      PGBOUNCER_SERVER_IDLE_TIMEOUT: "30"
+      PGBOUNCER_QUERY_WAIT_TIMEOUT: "2000"
+      PGBOUNCER_AUTH_TYPE: scram-sha-256
+    volumes:
+      - ./pgbouncer/pg_hba.conf:/opt/bitnami/pgbouncer/conf/pg_hba.conf:ro
+
   app:
     image: ${APP_IMAGE} # ← Hub 경로 사용 (build 없음!)
     container_name: app
