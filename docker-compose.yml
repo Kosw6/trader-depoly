@@ -51,9 +51,8 @@ services:
     volumes:
       - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
       - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
-    entrypoint: ["pgbouncer"]                     # ← entrypoint.sh 우회
-    command: ["/etc/pgbouncer/pgbouncer.ini"]     # ← ini 직접 전달
-
+    entrypoint: ["pgbouncer"] # ← entrypoint.sh 우회
+    command: ["/etc/pgbouncer/pgbouncer.ini"] # ← ini 직접 전달
 
   app:
     image: ${APP_IMAGE} # ← Hub 경로 사용 (build 없음!)
@@ -64,6 +63,13 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:6432/${POSTGRES_DB}?prepareThreshold=0
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 250
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 30
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: 2000
+      SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: 1800000
+      SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: 30000
+      SERVER_TOMCAT_THREADS_MAX: 500
+      SERVER_TOMCAT_THREADS_MIN_SPARE: 50
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_TIMEOUT: 5s
@@ -71,12 +77,12 @@ services:
       SPRING_DATA_REDIS_LETTUCE_POOL_MAX_IDLE: 8
       SPRING_DATA_REDIS_LETTUCE_POOL_MIN_IDLE: 0
     depends_on:
-     pgbouncer:                   
-       condition: service_started
-     db:
-       condition: service_healthy
-     redis:
-       condition: service_healthy
+      pgbouncer:
+        condition: service_started
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "${APP_PORT}:8080"
     networks: [appnet]
