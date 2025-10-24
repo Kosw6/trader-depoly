@@ -40,7 +40,6 @@ services:
       retries: 10
     networks: [appnet]
 
-
   app:
     image: ${APP_IMAGE} # ← Hub 경로 사용 (build 없음!)
     container_name: app
@@ -50,7 +49,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 80
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 120
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 20
       SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: 5000
       SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: 1800000
@@ -64,10 +63,10 @@ services:
       SPRING_DATA_REDIS_LETTUCE_POOL_MAX_IDLE: 64
       SPRING_DATA_REDIS_LETTUCE_POOL_MIN_IDLE: 8
     depends_on:
-     db:
-       condition: service_healthy
-     redis:
-       condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "${APP_PORT}:8080"
     networks: [appnet]
