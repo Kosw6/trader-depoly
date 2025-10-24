@@ -64,8 +64,12 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:6432/${POSTGRES_DB}?prepareThreshold=0
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      SPRING_DATA_REDIS_HOST : redis
-      SPRING_DATA_REDIS_PORT : 6379
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_TIMEOUT: 5s
+      SPRING_DATA_REDIS_LETTUCE_POOL_MAX_ACTIVE: 16
+      SPRING_DATA_REDIS_LETTUCE_POOL_MAX_IDLE: 8
+      SPRING_DATA_REDIS_LETTUCE_POOL_MIN_IDLE: 0
     depends_on:
      pgbouncer:                   
        condition: service_started
