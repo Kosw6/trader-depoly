@@ -168,12 +168,12 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.17.0
     container_name: postgres-exporter
     environment:
-      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable&application_name=postgres_exporter
     command:
       - --web.listen-address=:9187
-      - --auto-discover-databases # 여러 DB 자동 수집 (또는 DSN을 trader로 고정)
-      - --collector.stat_statements # ← 여기! (환경에 따라 --collector.pgstatstatements)
-
+      - --collector.stat_statements # 또는 --collector.pgstatstatements (help로 확인)
+      - --include-databases=trader # ✅ auto-discover 대체 (쉼표로 여러개 가능)
+      - --log.level=info
     depends_on:
       - db
     networks: [appnet]
