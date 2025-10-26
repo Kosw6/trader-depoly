@@ -29,10 +29,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       TZ: ${TZ}
+      # 복원 병렬도(옵션)
+      PG_RESTORE_JOBS: 4
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+      # init 스크립트/덤프: 빈 데이터 디렉토리에서만 실행됨에 유의
       - ./docker/20_restore.sh:/docker-entrypoint-initdb.d/20_restore.sh:ro
       - ./docker/trader.dump:/docker-entrypoint-initdb.d/trader.dump:ro
     healthcheck:
@@ -173,7 +176,7 @@ services:
       - --web.listen-address=:9187
       - --collector.stat_statements # 또는 --collector.pgstatstatements (help로 확인)
       - --include-databases=trader # ✅ auto-discover 대체 (쉼표로 여러개 가능)
-      - --log.level=inf
+      - --log.level=info
     depends_on:
       - db
     networks: [appnet]
