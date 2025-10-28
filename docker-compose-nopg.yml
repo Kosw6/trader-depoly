@@ -1,6 +1,6 @@
 services:
   db:
-    image: timescale/timescaledb:latest-pg17
+    image: timescale/timescaledb:2.21.2-pg17
     container_name: db
     command:
       - postgres
@@ -24,6 +24,11 @@ services:
       - track_io_timing=on
       - -c
       - default_statistics_target=200
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_timeout=15min
+
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
