@@ -24,6 +24,14 @@ services:
       - track_io_timing=on
       - -c
       - default_statistics_target=200
+      - -c
+      - compute_query_id=on
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=10000
+      - -c
+      - track_activity_query_size=2048
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
