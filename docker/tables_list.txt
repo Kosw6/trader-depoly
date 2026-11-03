@@ -1,0 +1,26 @@
+; Archive created at 2025-10-26 23:27:45
+;     Dumped from database version: 17.4
+253; 1259 24700 TABLE public stock postgres
+2126; 1259 83808 TABLE public stock_v2_90d postgres
+237; 1259 24579 TABLE public directory postgres
+238; 1259 24584 TABLE public edge postgres
+240; 1259 24592 TABLE public node postgres
+2124; 1259 73946 TABLE public node_note_link postgres
+242; 1259 24600 TABLE public note postgres
+244; 1259 24608 TABLE public page postgres
+252; 1259 24688 TABLE public stock_info postgres
+246; 1259 24616 TABLE public team postgres
+250; 1259 24632 TABLE public user_team postgres
+248; 1259 24622 TABLE public users postgres
+32305; 0 24579 TABLE DATA public directory postgres
+32306; 0 24584 TABLE DATA public edge postgres
+32308; 0 24592 TABLE DATA public node postgres
+34138; 0 73946 TABLE DATA public node_note_link postgres
+32310; 0 24600 TABLE DATA public note postgres
+32312; 0 24608 TABLE DATA public page postgres
+32321; 0 24700 TABLE DATA public stock postgres
+32320; 0 24688 TABLE DATA public stock_info postgres
+34140; 0 83808 TABLE DATA public stock_v2_90d postgres
+32314; 0 24616 TABLE DATA public team postgres
+32318; 0 24632 TABLE DATA public user_team postgres
+32316; 0 24622 TABLE DATA public users postgres

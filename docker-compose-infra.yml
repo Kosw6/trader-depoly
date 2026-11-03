@@ -1,0 +1,84 @@
+services:
+
+  discovery-server:
+    image: ${DISCOVERY_IMAGE}
+    container_name: discovery-server
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [infranet]
+
+  gateway:
+    image: ${GATEWAY_IMAGE}
+    container_name: gateway
+    restart: unless-stopped
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
+      SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
+      WS_SERVICE_NAME: trader
+      FAILBACK_POLL_INTERVAL_MS: 5000
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [infranet]
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: infra-node-exporter
+    restart: unless-stopped
+    pid: "host"
+    command:
+      - "--path.rootfs=/"
+    ports:
+      - "9100:9100"
+    networks: [infranet]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: infra-cadvisor
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    networks: [infranet]
+
+  promtail:
+    image: grafana/promtail:3.2.0
+    container_name: infra-promtail
+    restart: unless-stopped
+    environment:
+      LOKI_HOST: ${LOKI_HOST}
+      INSTANCE_NAME: infra
+      INSTANCE_ID: infra
+      TZ: Asia/Seoul
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml -config.expand-env=true
+    networks: [infranet]
+
+networks:
+  infranet:
+    driver: bridge

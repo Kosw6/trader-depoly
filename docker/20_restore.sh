@@ -29,100 +29,44 @@ SQL
 # 2) pre-restore 훅
 $PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT timescaledb_pre_restore();"
 
-# 3) 섹션별 복구 (화이트리스트 스키마만)
-echo "🧱 PRE-DATA..."
-for S in $SCHEMAS; do
-  pg_restore --no-owner --no-privileges --section=pre-data --schema="$S" \
-    -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$DUMP_PATH" | tee -a "$LOG_DIR/pre-data.log"
-done
+# 3) 덤프 리스트 생성 후 불필요 항목 제거
+echo "📝 Building filtered restore list (exclude EXTENSION, headers, _timescaledb_* schemas)"
+pg_restore -l "${DUMP_PATH}" > "${LIST_PATH}"
 
-echo "📥 DATA..."
-for S in $SCHEMAS; do
-  pg_restore --no-owner --no-privileges --section=data --schema="$S" -j "$JOBS" \
-    -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$DUMP_PATH" | tee -a "$LOG_DIR/data.log"
-done
+# BusyBox 호환: sed -I 대신 grep 파이프
+grep -vi ' EXTENSION ' "${LIST_PATH}" \
+  | grep -viE '(ENCODING|STDSTRINGS|SEARCHPATH|DATABASE)' \
+  | grep -viE ' _timescaledb_(catalog|internal|config) ' \
+  > "${LIST_PATH}.filtered"
 
-echo "🔩 POST-DATA..."
-for S in $SCHEMAS; do
-  pg_restore --no-owner --no-privileges --section=post-data --schema="$S" -j "$JOBS" \
-    -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$DUMP_PATH" | tee -a "$LOG_DIR/post-data.log"
-done
+mv "${LIST_PATH}.filtered" "${LIST_PATH}"
 
-# 4) 부모 INDEX/FK 보정 (실패 허용)
-echo "🔎 Checking parent indexes/constraints..."
-MISSING=$($PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "
-WITH h AS (
-  SELECT (hypertable_schema||'.'||hypertable_name) AS rel
-  FROM timescaledb_information.hypertables
-),
-idx AS (
-  SELECT (schemaname||'.'||tablename) AS rel, COUNT(*) AS idx_cnt
-  FROM pg_indexes WHERE schemaname='public' GROUP BY 1
-),
-fk AS (
-  SELECT c.conrelid::regclass::text AS rel, COUNT(*) AS fk_cnt
-  FROM pg_constraint c WHERE c.contype='f' GROUP BY 1
-)
-SELECT COUNT(*) FROM (
-  SELECT h.rel,
-         COALESCE(i.idx_cnt,0) AS i,
-         COALESCE(f.fk_cnt,0) AS f
-  FROM h LEFT JOIN idx i ON i.rel=h.rel LEFT JOIN fk f ON f.rel=h.rel
-  WHERE COALESCE(i.idx_cnt,0)=0 OR COALESCE(f.fk_cnt,0)=0
-) s;")
+# 4) 복원 실행 (단일 스레드: post-data 락 경합 최소화)
+echo "🔧 Running pg_restore with filtered list (skip EXTENSION & _timescaledb_*), -j 1"
+pg_restore \
+  --no-owner --no-privileges \
+  --use-list="${LIST_PATH}" \
+  --exclude-schema=_timescaledb_catalog \
+  --exclude-schema=_timescaledb_internal \
+  --exclude-schema=_timescaledb_config \
+  --exit-on-error \
+  -j 1 \
+  -v \
+  -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+  "${DUMP_PATH}" \
+  > "${LOG_PATH}" 2>&1
 
-if [ "${MISSING:-0}" -ne 0 ]; then
-  echo "⚠️ Replaying parent public INDEX/FK from dump (soft-fail allowed)..."
-  TOC=/tmp/parent.ic
-  pg_restore -l "$DUMP_PATH" \
-    | grep -E "^(;| ).*( INDEX | FK CONSTRAINT ).* public " > "$TOC" || true
+# 5) Timescale post-restore 훅
+$PSQL -d "${POSTGRES_DB}" -c "SELECT timescaledb_post_restore();"
 
-  if [ -s "$TOC" ]; then
-    set +e
-    pg_restore --no-owner --no-privileges --use-list="$TOC" \
-      -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$DUMP_PATH" | tee "$LOG_DIR/parent-ic.log"
-    RC=$?
-    set -e
-    [ $RC -ne 0 ] && echo "⚠️ parent INDEX/FK replay returned ${RC} — continuing. See $LOG_DIR/parent-ic.log"
-  else
-    echo "ℹ️ No public INDEX/FK lines found in TOC."
-  fi
-else
-  echo "✅ Parent indexes/constraints look present."
-fi
+echo "✅ Database restore complete."
 
-# 5) post-restore 훅 (청크 인덱스/제약 생성)
-echo "🧯 timescaledb_post_restore()..."
-$PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT timescaledb_post_restore();"
+# 6) 간단 검증 (인덱스/제약 개수)
+$PSQL -d "${POSTGRES_DB}" -c \
+  "SELECT 'indexes' AS kind, count(*) FROM pg_indexes WHERE schemaname='public'
+   UNION ALL
+   SELECT 'constraints', count(*) FROM pg_constraint c
+     JOIN pg_namespace n ON n.oid=c.connamespace
+    WHERE n.nspname='public';"
 
-# 6) 검증 (버전별 뷰 유무 대응)
-echo "🔎 Hypertables & chunks:"
-$PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-"SELECT hypertable_schema, hypertable_name, num_chunks
-   FROM timescaledb_information.hypertables
-   ORDER BY 1,2;"
-
-HAS_VIEW=$($PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
-"SELECT to_regclass('timescaledb_information.chunk_indexes') IS NOT NULL;")
-if [ "$HAS_VIEW" = "t" ]; then
-  $PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-  "SELECT c.schema_name, c.table_name, i.index_name
-     FROM timescaledb_information.chunk_indexes i
-     JOIN timescaledb_information.chunks c ON c.chunk_table = i.chunk_table
-     ORDER BY 1,2,3 LIMIT 20;"
-else
-  $PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-  "SELECT n.nspname AS schema_name, c.relname AS chunk_table, i.relname AS index_name
-     FROM pg_class i
-     JOIN pg_index ix ON ix.indexrelid=i.oid
-     JOIN pg_class c  ON ix.indrelid=c.oid
-     JOIN pg_namespace n ON n.oid=c.relnamespace
-    WHERE n.nspname='_timescaledb_internal' AND c.relname LIKE '_hyper_%'
-    ORDER BY 1,2,3 LIMIT 20;"
-fi
-
-echo "📊 ANALYZE"
-$PSQL -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "ANALYZE;"
-
-echo "✅ Restore complete."
-echo "🗒  Logs: ${LOG_DIR}"
+echo "🗒  Detailed log: ${LOG_PATH}"

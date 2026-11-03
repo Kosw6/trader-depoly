@@ -1,0 +1,26 @@
+# One collection/ETL process on the existing index/embedding host.
+# Opt in explicitly after durable storage, DB and queue preflight checks.
+services:
+  shared-data-worker:
+    profiles: [collection]
+    image: ${SHARED_WORKER_IMAGE:?set a verified worker image}
+    user: "10001:10001"
+    env_file: [shared.env]
+    command: [python, -m, workers.kafka_pipeline_consumer]
+    init: true
+    restart: "no"
+    network_mode: host
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.5
+    pids_limit: 64
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001
+      - /app/pipeline_output:rw,noexec,nosuid,size=128m,uid=10001,gid=10001
+    stop_grace_period: 180s
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}

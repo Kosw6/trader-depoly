@@ -3,7 +3,16 @@ services:
     build:
       context: ../trader-backend
       dockerfile: Dockerfile
-    image: ${APP_IMAGE} # ← build 후 이 이름으로 태깅됨
+      target: ${APP_TARGET:-prod}
+    image: ${APP_IMAGE}:${APP_TARGET:-prod} # ← build 후 이 이름으로 태깅됨
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE} # ← 이 줄이 없으면 항상 prod로 뜸
       # JAVA_OPTS: ${JAVA_OPTS:-"-Xms256m -Xmx1g"}              # 선택
+  frontend:
+    build:
+      context: ../trader-frontend/trader
+      dockerfile: Dockerfile
+      target: ${FRONT_TARGET:-prod}
+    image: ${FRONT_IMAGE}:${FRONT_TARGET:-prod}
+    depends_on:
+      - app

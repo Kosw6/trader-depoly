@@ -1,0 +1,10 @@
+services:
+  trader-controller:
+    image: ${CONTROLLER_IMAGE}
+    container_name: trader-controller
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${CONTROLLER_HTTP_PORT:-8090}:8090"
+

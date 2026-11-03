@@ -1,0 +1,174 @@
+services:
+  eureka:
+    image: my-eureka:latest
+    container_name: eureka
+    ports:
+      - "8761:8761"
+    networks: [appnet]
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [appnet]
+
+  kafka:
+    image: apache/kafka:3.7.1
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks: [appnet]
+
+  gateway:
+    image: my-gateway:latest
+    container_name: gateway
+    depends_on:
+      - eureka
+    environment:
+      SPRING_APPLICATION_NAME: gateway-service
+      SERVER_PORT: 8080
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
+
+      # failback poll/drain config
+      FAILBACK_TARGETS: http://ws-1:8082,http://ws-2:8083
+      FAILBACK_HEALTH_PATH: /internal/health
+      FAILBACK_DRAIN_PATH: /internal/drain
+      FAILBACK_REQUIRED_SUCCESS_COUNT: 3
+      FAILBACK_POLL_INTERVAL_MS: 5000
+
+      # internal api auth
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+    ports:
+      - "8080:8080"
+    networks: [appnet]
+
+  ws-1:
+    image: my-trader-server:profile
+    container_name: ws-1
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka:
+        condition: service_started
+    environment:
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET}
+      OAUTH_KAKAO_CLIENT_ID: ${OAUTH_KAKAO_CLIENT_ID}
+
+      SPRING_PROFILES_ACTIVE: profile
+      SPRING_APPLICATION_NAME: ws-service
+      SERVER_PORT: 8082
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/trader
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+
+      # 운영 브로드캐스트 그룹
+      SPRING_KAFKA_CONSUMER_GROUP_ID: canvas-broadcast-group
+      APP_KAFKA_BROADCAST_GROUP_ID: canvas-broadcast-group
+    
+      # catch-up 전용 그룹 prefix
+      APP_KAFKA_CATCHUP_GROUP_ID: canvas-replay
+
+      # topic
+      APP_KAFKA_TOPIC_CANVAS_EVENTS: canvas-events
+
+      APP_ROLE: ws
+      APP_INSTANCE_ID: ws-1
+      WS_SHARD_ID: 1
+
+      # internal api auth
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
+      EUREKA_INSTANCE_INSTANCE_ID: ws-service:ws-1
+    ports:
+      - "8082:8082"
+    networks: [appnet]
+
+  ws-2:
+    image: my-trader-server:profile
+    container_name: ws-2
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka:
+        condition: service_started
+    environment:
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET}
+      OAUTH_KAKAO_CLIENT_ID: ${OAUTH_KAKAO_CLIENT_ID}
+
+      SPRING_PROFILES_ACTIVE: profile
+      SPRING_APPLICATION_NAME: ws-service
+      SERVER_PORT: 8083
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/trader
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+
+      # 운영 브로드캐스트 그룹
+      SPRING_KAFKA_CONSUMER_GROUP_ID: canvas-broadcast-group
+      APP_KAFKA_BROADCAST_GROUP_ID: canvas-broadcast-group
+
+      # catch-up 전용 그룹 prefix
+      APP_KAFKA_CATCHUP_GROUP_ID: canvas-replay
+
+      # topic
+      APP_KAFKA_TOPIC_CANVAS_EVENTS: canvas-events
+
+      APP_ROLE: ws
+      APP_INSTANCE_ID: ws-2
+      WS_SHARD_ID: 2
+
+      # internal api auth
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
+      EUREKA_INSTANCE_INSTANCE_ID: ws-service:ws-2
+    ports:
+      - "8083:8083"
+    networks: [appnet]
+
+volumes:
+  redis_data:
+  kafka_data:
+
+networks:
+  appnet:

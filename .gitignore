@@ -1,1 +1,13 @@
 .env
+.env.*
+!.env.example
+!.env.template
+**/__pycache__/
+*.py[cod]
+*.dump
+*.jfr
+*.log
+*.pem
+*.key
+*.p12
+*.pfx

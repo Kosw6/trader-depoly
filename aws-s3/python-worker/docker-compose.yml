@@ -1,0 +1,32 @@
+x-worker-common: &worker-common
+  image: ${WORKER_IMAGE}
+  restart: unless-stopped
+  env_file:
+    - .env
+  volumes:
+    - trader_pipeline_output:/app/pipeline_output
+
+services:
+  trader-data-job-worker:
+    <<: *worker-common
+    container_name: trader-data-job-worker
+    command: ["python", "-m", "workers.kafka_pipeline_consumer"]
+
+  trader-data-bls-etl-worker:
+    <<: *worker-common
+    container_name: trader-data-bls-etl-worker
+    command: ["python", "-m", "workers.bls_macro_etl_worker"]
+
+  trader-data-kis-etl-worker:
+    <<: *worker-common
+    container_name: trader-data-kis-etl-worker
+    command: ["python", "-m", "workers.kis_price_etl_worker"]
+
+  trader-data-sec-etl-worker:
+    <<: *worker-common
+    container_name: trader-data-sec-etl-worker
+    command: ["python", "-m", "workers.sec_financial_etl_worker"]
+
+volumes:
+  trader_pipeline_output:
+
